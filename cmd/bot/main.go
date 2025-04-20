@@ -46,7 +46,7 @@ func main() {
 	newsFetcher := news.NewFetcher(cfg)
 	analyzer := analysis.NewAnalyzer(cfg)
 
-	telegramBot, err := telegram.NewBot(cfg, logger)
+	telegramBot, err := telegram.NewBot(cfg, logger, investClient, analyzer, newsFetcher)
 	if err != nil {
 		logger.Fatalf("Failed to initialize Telegram bot: %v", err)
 	}
@@ -67,6 +67,10 @@ func main() {
 		return
 	}
 
+	// Start the Telegram bot
+	telegramBot.Start()
+	defer telegramBot.Stop()
+
 	// Initialize scheduler
 	sched := scheduler.NewScheduler(cfg, logger, investClient, newsFetcher, analyzer, telegramBot)
 	if err := sched.Start(); err != nil {
@@ -75,7 +79,7 @@ func main() {
 	defer sched.Stop()
 
 	// Send startup notification
-	if err := telegramBot.SendMessage("🤖 Invest Manager Bot started successfully."); err != nil {
+	if err := telegramBot.SendMessage("🤖 Invest Manager Bot запущен и готов к работе.\nОтправьте /help для списка доступных команд."); err != nil {
 		logger.Printf("Failed to send startup notification: %v", err)
 	}
 

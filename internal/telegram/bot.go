@@ -1,39 +1,193 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"invest-manager/internal/analysis"
 	"invest-manager/internal/config"
 	"invest-manager/internal/invest"
+	"invest-manager/internal/news"
 	"log"
 	"strings"
+	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // Bot handles Telegram communication
 type Bot struct {
-	api      *tgbotapi.BotAPI
-	chatID   string
-	logger   *log.Logger
+	api         *tgbotapi.BotAPI
+	chatID      string
+	logger      *log.Logger
+	investor    *invest.Client
+	analyzer    *analysis.Analyzer
+	newsFetcher *news.Fetcher
+	stopChan    chan struct{}
+	wg          sync.WaitGroup
 }
 
 // NewBot creates a new Telegram bot
-func NewBot(cfg *config.Config, logger *log.Logger) (*Bot, error) {
+func NewBot(cfg *config.Config, logger *log.Logger, 
+	investor *invest.Client, analyzer *analysis.Analyzer, 
+	newsFetcher *news.Fetcher) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(cfg.TelegramToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Telegram bot: %w", err)
 	}
 	
 	return &Bot{
-		api:    api,
-		chatID: cfg.TelegramChatID,
-		logger: logger,
+		api:         api,
+		chatID:      cfg.TelegramChatID,
+		logger:      logger,
+		investor:    investor,
+		analyzer:    analyzer,
+		newsFetcher: newsFetcher,
+		stopChan:    make(chan struct{}),
 	}, nil
+}
+
+// Start begins listening for commands from the authorized user
+func (b *Bot) Start() {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := b.api.GetUpdatesChan(u)
+
+	b.wg.Add(1)
+	go b.handleUpdates(updates)
+	
+	b.logger.Println("Telegram bot started and listening for commands")
+}
+
+// Stop stops the bot
+func (b *Bot) Stop() {
+	close(b.stopChan)
+	b.wg.Wait()
+	b.api.StopReceivingUpdates()
+	b.logger.Println("Telegram bot stopped")
+}
+
+// handleUpdates processes incoming messages and commands
+func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel) {
+	defer b.wg.Done()
+	
+	for {
+		select {
+		case <-b.stopChan:
+			return
+		case update := <-updates:
+			if update.Message == nil {
+				continue
+			}
+
+			// Only process messages from authorized chat ID
+			chatIDStr := fmt.Sprintf("%d", update.Message.Chat.ID)
+			if chatIDStr != b.chatID {
+				b.logger.Printf("Received message from unauthorized chat: %s", chatIDStr)
+				continue
+			}
+
+			// Process commands
+			if update.Message.IsCommand() {
+				b.handleCommand(update.Message)
+			}
+		}
+	}
+}
+
+// handleCommand processes bot commands
+func (b *Bot) handleCommand(message *tgbotapi.Message) {
+	switch message.Command() {
+	case "analyze":
+		b.logger.Printf("Received analyze command from chat ID: %d", message.Chat.ID)
+		b.handleAnalyzeCommand(message)
+	case "help":
+		b.handleHelpCommand(message)
+	case "status":
+		b.handleStatusCommand(message)
+	default:
+		b.sendMessage("Неизвестная команда. Используйте /help для списка доступных команд.")
+	}
+}
+
+// handleAnalyzeCommand performs immediate portfolio analysis
+func (b *Bot) handleAnalyzeCommand(message *tgbotapi.Message) {
+	replyMsg := tgbotapi.NewMessage(message.Chat.ID, "🔄 Запускаю анализ вашего портфеля...")
+	b.api.Send(replyMsg)
+	
+	// Run analysis in a separate goroutine to not block message handling
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*1000*1000*1000) // 60 sec timeout
+		defer cancel()
+		
+		// Get portfolio
+		b.logger.Println("Getting portfolio...")
+		portfolio, err := b.investor.GetPortfolio(ctx)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Ошибка при получении портфеля: %v", err)
+			b.logger.Println(errorMsg)
+			b.sendMessage(errorMsg)
+			return
+		}
+		
+		// Get news
+		b.logger.Println("Fetching news...")
+		articles, err := b.newsFetcher.FetchNews("Russia stocks", 5)
+		if err != nil {
+			b.logger.Printf("Warning: could not fetch news: %v, continuing without news", err)
+			articles = []news.Article{} // Empty but continue
+		}
+		
+		// Analyze portfolio
+		b.logger.Println("Analyzing portfolio...")
+		analysis, err := b.analyzer.AnalyzePortfolio(ctx, portfolio, articles, false)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Ошибка при анализе портфеля: %v", err)
+			b.logger.Println(errorMsg)
+			b.sendMessage(errorMsg)
+			return
+		}
+		
+		// Send analysis results
+		b.logger.Println("Sending analysis results...")
+		err = b.SendPortfolioAnalysis(portfolio, analysis)
+		if err != nil {
+			b.logger.Printf("Error sending portfolio analysis: %v", err)
+			b.sendMessage(fmt.Sprintf("Ошибка при отправке анализа: %v", err))
+		}
+	}()
+}
+
+// handleHelpCommand shows available commands
+func (b *Bot) handleHelpCommand(message *tgbotapi.Message) {
+	helpText := `🤖 *Доступные команды*:
+
+/analyze - запустить анализ портфеля прямо сейчас
+/status - проверить статус бота
+/help - показать это сообщение
+
+Бот также автоматически анализирует ваш портфель каждый день в 7:00 (МСК).`
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, helpText)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+	b.api.Send(msg)
+}
+
+// handleStatusCommand shows bot status
+func (b *Bot) handleStatusCommand(message *tgbotapi.Message) {
+	statusText := "✅ Бот работает нормально. Ежедневный анализ портфеля выполняется в 7:00 (МСК)."
+	
+	msg := tgbotapi.NewMessage(message.Chat.ID, statusText)
+	b.api.Send(msg)
 }
 
 // SendMessage sends a simple text message
 func (b *Bot) SendMessage(text string) error {
+	return b.sendMessage(text)
+}
+
+// sendMessage is an internal method to send a simple text message
+func (b *Bot) sendMessage(text string) error {
 	// Check if message is too long for Telegram
 	const maxMessageLength = 4096
 	
