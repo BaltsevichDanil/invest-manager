@@ -12,6 +12,7 @@ type Config struct {
 	TinkoffAccountID string
 	TinkoffEndpoint string
 	OpenAIApiKey    string
+	OpenAIBaseURL   string
 	TelegramToken   string
 	TelegramChatID  string
 	NewsAPIToken    string
@@ -26,6 +27,7 @@ func Load() (*Config, error) {
 		TinkoffAccountID: os.Getenv("TINKOFF_ACCOUNT_ID"),
 		TinkoffEndpoint: os.Getenv("TINKOFF_ENDPOINT"),
 		OpenAIApiKey:    os.Getenv("OPENAI_API_KEY"),
+		OpenAIBaseURL:   os.Getenv("OPENAI_BASE_URL"),
 		TelegramToken:   os.Getenv("TELEGRAM_TOKEN"),
 		TelegramChatID:  os.Getenv("TELEGRAM_CHAT_ID"),
 		NewsAPIToken:    os.Getenv("NEWSAPI_TOKEN"),
@@ -71,6 +73,9 @@ func (c *Config) validate() error {
 	}
 	if c.OpenAIApiKey == "" {
 		return errors.New("OPENAI_API_KEY is required")
+	}
+	if c.OpenAIBaseURL == "" {
+		return errors.New("OPENAI_BASE_URL is required")
 	}
 	if c.TelegramToken == "" {
 		return errors.New("TELEGRAM_TOKEN is required")

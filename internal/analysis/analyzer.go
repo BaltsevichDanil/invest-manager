@@ -34,7 +34,10 @@ type Analyzer struct {
 
 // NewAnalyzer creates a new OpenAI analyzer
 func NewAnalyzer(cfg *config.Config) *Analyzer {
-	client := openai.NewClient(cfg.OpenAIApiKey)
+	openaiConfig := openai.DefaultConfig(cfg.OpenAIApiKey)
+	openaiConfig.BaseURL = cfg.OpenAIBaseURL
+	client := openai.NewClientWithConfig(openaiConfig)
+	
 	return &Analyzer{
 		client: client,
 		model:  "gpt-4o", // Using GPT-4 as specified
