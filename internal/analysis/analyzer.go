@@ -66,9 +66,11 @@ RECOMMENDATIONS:
 [ticker]: [NAME] - [BUY/SELL/HOLD]
 Explanation: [1-2 sentences explaining the recommendation]
 
-[Next position...]`
+[Next position...]
 
-	userPrompt := fmt.Sprintf("Here is the current portfolio information:\n\n%s\n\nRecent news about Russian stocks:\n\n%s\n\nPlease provide investment recommendations for each position in the portfolio.", portfolioInfo, newsInfo)
+Отвечай на русском языке.`
+
+	userPrompt := fmt.Sprintf("Here is the current portfolio information:\n\n%s\n\nRecent news about Russian stocks:\n\n%s\n\nPlease provide investment recommendations for each position in the portfolio.\n\nОтвечай на русском языке.", portfolioInfo, newsInfo)
 	
 	// Add monthly reminder if needed
 	if isMonthlyReminder {

@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/russianinvestments/invest-api-go-sdk/investgo"
+	proto "github.com/russianinvestments/invest-api-go-sdk/proto"
 )
 
 // Client wraps Tinkoff Invest API client
@@ -68,56 +69,69 @@ func (c *Client) Close() {
 	c.sdk.Stop()
 }
 
+// moneyValueToFloat64 converts MoneyValue to float64
+func moneyValueToFloat64(mv *proto.MoneyValue) float64 {
+	if mv == nil {
+		return 0
+	}
+	return float64(mv.Units) + float64(mv.Nano)/1e9
+}
+
+// quotationToFloat64 converts Quotation to float64
+func quotationToFloat64(q *proto.Quotation) float64 {
+	if q == nil {
+		return 0
+	}
+	return float64(q.Units) + float64(q.Nano)/1e9
+}
+
 // GetPortfolio retrieves the current portfolio
 func (c *Client) GetPortfolio(ctx context.Context) (*Portfolio, error) {
-	// For demo/testing - create a dummy portfolio
-	dummyPositions := []Position{
-		{
-			FIGI:           "BBG004730N88",
-			Ticker:         "SBER",
-			Name:           "Сбербанк",
-			InstrumentType: "Акция",
-			Quantity:       10,
-			AveragePrice:   270.5,
-			CurrentPrice:   285.3,
-			ExpectedYield:  148.0,
-			Currency:       "RUB",
-		},
-		{
-			FIGI:           "BBG004S68CP5",
-			Ticker:         "LKOH",
-			Name:           "Лукойл",
-			InstrumentType: "Акция",
-			Quantity:       5,
-			AveragePrice:   6500.0,
-			CurrentPrice:   6700.0,
-			ExpectedYield:  1000.0,
-			Currency:       "RUB",
-		},
-		{
-			FIGI:           "BBG004S68879",
-			Ticker:         "GAZP",
-			Name:           "Газпром",
-			InstrumentType: "Акция",
-			Quantity:       20,
-			AveragePrice:   165.0,
-			CurrentPrice:   160.0,
-			ExpectedYield:  -100.0,
-			Currency:       "RUB",
-		},
+	accountsClient := c.sdk.NewUsersServiceClient()
+	accountsResp, err := accountsClient.GetAccounts(proto.AccountStatus_ACCOUNT_STATUS_UNSPECIFIED.Enum())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get accounts: %w", err)
+	}
+	if len(accountsResp.Accounts) == 0 {
+		return nil, fmt.Errorf("no accounts found")
+	}
+	accountId := accountsResp.Accounts[0].Id
+
+	opsClient := c.sdk.NewOperationsServiceClient()
+	portfolioResp, err := opsClient.GetPortfolio(accountId, 0) // 0 = RUB
+	if err != nil {
+		return nil, fmt.Errorf("failed to get portfolio: %w", err)
 	}
 
-	// Calculate totals
+	positions := make([]Position, 0, len(portfolioResp.Positions))
 	var totalAmount, totalYield float64
-	for _, pos := range dummyPositions {
-		totalAmount += pos.Quantity * pos.CurrentPrice
-		totalYield += pos.ExpectedYield
+	currency := "RUB"
+
+	for _, pos := range portfolioResp.Positions {
+		qty := quotationToFloat64(pos.Quantity)
+		avgPrice := moneyValueToFloat64(pos.AveragePositionPrice)
+		curPrice := moneyValueToFloat64(pos.CurrentPrice)
+		yield := quotationToFloat64(pos.ExpectedYield)
+
+		positions = append(positions, Position{
+			FIGI:           pos.Figi,
+			Ticker:         "",
+			Name:           "",
+			InstrumentType: pos.InstrumentType,
+			Quantity:       qty,
+			AveragePrice:   avgPrice,
+			CurrentPrice:   curPrice,
+			ExpectedYield:  yield,
+			Currency:       currency,
+		})
+		totalAmount += qty * curPrice
+		totalYield += yield
 	}
 
 	return &Portfolio{
-		Positions:     dummyPositions,
+		Positions:     positions,
 		TotalAmount:   totalAmount,
 		ExpectedYield: totalYield,
-		Currency:      "RUB",
+		Currency:      currency,
 	}, nil
 }
