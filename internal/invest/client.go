@@ -113,10 +113,23 @@ func (c *Client) GetPortfolio(ctx context.Context) (*Portfolio, error) {
 		curPrice := moneyValueToFloat64(pos.CurrentPrice)
 		yield := quotationToFloat64(pos.ExpectedYield)
 
+		// Fetch instrument details by FIGI
+		instrClient := c.sdk.NewInstrumentsServiceClient()
+		instrResp, err := instrClient.InstrumentByFigi(pos.Figi)
+		var ticker, name string
+		if err != nil || instrResp.GetInstrument() == nil {
+			// Fallback to FIGI and instrument type if API call fails
+			ticker = pos.Figi
+			name = pos.InstrumentType
+		} else {
+			ticker = instrResp.GetInstrument().GetTicker()
+			name = instrResp.GetInstrument().GetName()
+		}
+
 		positions = append(positions, Position{
 			FIGI:           pos.Figi,
-			Ticker:         pos.Figi,
-			Name:           pos.InstrumentType,
+			Ticker:         ticker,
+			Name:           name,
 			InstrumentType: pos.InstrumentType,
 			Quantity:       qty,
 			AveragePrice:   avgPrice,

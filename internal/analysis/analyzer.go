@@ -24,6 +24,7 @@ type PortfolioAnalysis struct {
 	Recommendations []Recommendation
 	Summary         string
 	IsMonthlyReminder bool
+	RawText         string // store original AI response
 }
 
 // Analyzer handles OpenAI interactions
@@ -111,6 +112,8 @@ Explanation: [1-2 sentences explaining the recommendation]
 		return nil, fmt.Errorf("error parsing analysis response: %w", err)
 	}
 	
+	// Store raw AI response for fallback display
+	analysis.RawText = analysisText
 	analysis.IsMonthlyReminder = isMonthlyReminder
 	
 	return analysis, nil
@@ -194,56 +197,55 @@ func parseAnalysisResponse(analysisText string, portfolio *invest.Portfolio) (*P
 			}
 		}
 		
-		// Parse the recommendations
+		// Parse the recommendations: lines starting with a ticker
 		recsText := summaryParts[1]
 		recsLines := strings.Split(recsText, "\n")
-		
 		var currentRec *Recommendation
-		
-		for _, line := range recsLines {
-			line = strings.TrimSpace(line)
+		for i := 0; i < len(recsLines); i++ {
+			line := strings.TrimSpace(recsLines[i])
 			if line == "" {
 				continue
 			}
-			
-			// Check if this is a new recommendation
+			// Detect new recommendation by ticker prefix
 			for _, pos := range portfolio.Positions {
-				if strings.HasPrefix(line, pos.Ticker+":") || strings.HasPrefix(line, pos.Ticker+" -") || strings.HasPrefix(line, pos.Ticker+" –") {
-					// Complete previous recommendation if exists
-					if currentRec != nil && currentRec.Ticker != "" {
+				if strings.HasPrefix(line, pos.Ticker) {
+					// Append previous rec
+					if currentRec != nil {
 						analysis.Recommendations = append(analysis.Recommendations, *currentRec)
 					}
-					
-					// Start new recommendation
+					// Split into parts on first hyphen
+					parts := strings.SplitN(line, "-", 2)
 					action := ""
-					if strings.Contains(line, "BUY") {
-						action = "BUY"
-					} else if strings.Contains(line, "SELL") {
-						action = "SELL"
-					} else if strings.Contains(line, "HOLD") {
-						action = "HOLD"
+					if len(parts) > 1 {
+						p := strings.ToUpper(parts[1])
+						if strings.Contains(p, "BUY") {
+							action = "BUY"
+						} else if strings.Contains(p, "SELL") {
+							action = "SELL"
+						} else if strings.Contains(p, "HOLD") {
+							action = "HOLD"
+						}
 					}
-					
+					// Start new recommendation
 					currentRec = &Recommendation{
 						Ticker: pos.Ticker,
 						Name:   pos.Name,
 						Action: action,
 					}
+					// Next non-empty line is the explanation
+					if i+1 < len(recsLines) {
+						next := strings.TrimSpace(recsLines[i+1])
+						if next != "" && !strings.HasPrefix(next, pos.Ticker) {
+							currentRec.Reason = next
+							i++ // skip explanation line
+						}
+					}
 					break
 				}
 			}
-			
-			// If we have a current recommendation and this line is the explanation
-			if currentRec != nil && strings.HasPrefix(line, "Explanation:") {
-				currentRec.Reason = strings.TrimSpace(strings.TrimPrefix(line, "Explanation:"))
-			} else if currentRec != nil && currentRec.Reason == "" && !strings.Contains(line, currentRec.Ticker) {
-				// This might be the explanation without the "Explanation:" prefix
-				currentRec.Reason = line
-			}
 		}
-		
-		// Add the last recommendation
-		if currentRec != nil && currentRec.Ticker != "" {
+		// Append last recommendation
+		if currentRec != nil {
 			analysis.Recommendations = append(analysis.Recommendations, *currentRec)
 		}
 	}
