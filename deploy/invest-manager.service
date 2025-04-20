@@ -1,0 +1,27 @@
+[Unit]
+Description=Invest Manager Bot
+After=network.target
+
+[Service]
+Type=simple
+User=invest-bot
+WorkingDirectory=/opt/invest-manager
+ExecStart=/opt/invest-manager/invest-manager
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=TINKOFF_TOKEN=your-token-here
+Environment=TINKOFF_ACCOUNT_ID=your-account-id
+Environment=TINKOFF_ENDPOINT=
+Environment=OPENAI_API_KEY=your-openai-key
+Environment=TELEGRAM_TOKEN=your-telegram-token
+Environment=TELEGRAM_CHAT_ID=your-chat-id
+Environment=NEWSAPI_TOKEN=your-newsapi-token
+Environment=TIMEZONE=Europe/Moscow
+Environment=LOG_LEVEL=info
+
+[Install]
+WantedBy=multi-user.target 

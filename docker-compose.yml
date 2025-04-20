@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  invest-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invest-manager
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Moscow
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3" 
