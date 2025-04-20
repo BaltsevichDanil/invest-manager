@@ -12,7 +12,6 @@ import (
 // Client wraps Tinkoff Invest API client
 type Client struct {
 	sdk       *investgo.Client
-	accountID string
 	logger    *log.Logger
 	config    *config.Config
 }
@@ -59,7 +58,6 @@ func NewClient(cfg *config.Config, logger *log.Logger) (*Client, error) {
 
 	return &Client{
 		sdk:       client,
-		accountID: cfg.TinkoffAccountID,
 		logger:    logger,
 		config:    cfg,
 	}, nil
@@ -123,19 +121,3 @@ func (c *Client) GetPortfolio(ctx context.Context) (*Portfolio, error) {
 		Currency:      "RUB",
 	}, nil
 }
-
-// getInstrumentType converts API instrument type to readable string
-func getInstrumentType(instrumentType string) string {
-	switch instrumentType {
-	case "share":
-		return "Акция"
-	case "bond":
-		return "Облигация"
-	case "etf":
-		return "ETF"
-	case "currency":
-		return "Валюта"
-	default:
-		return instrumentType
-	}
-} 

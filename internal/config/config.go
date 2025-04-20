@@ -9,7 +9,6 @@ import (
 // Config stores all configuration for the application
 type Config struct {
 	TinkoffToken    string
-	TinkoffAccountID string
 	TinkoffEndpoint string
 	OpenAIApiKey    string
 	OpenAIBaseURL   string
@@ -24,7 +23,6 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		TinkoffToken:    os.Getenv("TINKOFF_TOKEN"),
-		TinkoffAccountID: os.Getenv("TINKOFF_ACCOUNT_ID"),
 		TinkoffEndpoint: os.Getenv("TINKOFF_ENDPOINT"),
 		OpenAIApiKey:    os.Getenv("OPENAI_API_KEY"),
 		OpenAIBaseURL:   os.Getenv("OPENAI_BASE_URL"),
@@ -67,9 +65,6 @@ func getEnvOrDefault(key, defaultValue string) string {
 func (c *Config) validate() error {
 	if c.TinkoffToken == "" {
 		return errors.New("TINKOFF_TOKEN is required")
-	}
-	if c.TinkoffAccountID == "" {
-		return errors.New("TINKOFF_ACCOUNT_ID is required")
 	}
 	if c.OpenAIApiKey == "" {
 		return errors.New("OPENAI_API_KEY is required")
