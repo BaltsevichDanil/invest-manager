@@ -68,7 +68,8 @@ Explanation: [1-2 sentences explaining the recommendation]
 
 [Next position...]
 
-Отвечай на русском языке.`
+Отвечай на русском языке.
+Пожалуйста, используйте заголовки строго на английском языке как "SUMMARY:" и "RECOMMENDATIONS:".`
 
 	userPrompt := fmt.Sprintf("Here is the current portfolio information:\n\n%s\n\nRecent news about Russian stocks:\n\n%s\n\nPlease provide investment recommendations for each position in the portfolio.\n\nОтвечай на русском языке.", portfolioInfo, newsInfo)
 	
@@ -154,16 +155,23 @@ func formatNewsInfo(articles []news.Article) string {
 
 // parseAnalysisResponse parses the OpenAI response into structured data
 func parseAnalysisResponse(analysisText string, portfolio *invest.Portfolio) (*PortfolioAnalysis, error) {
+	// Clean markdown formatting to detect headings reliably
+	cleanedText := strings.ReplaceAll(analysisText, "*", "")
+	cleanedText = strings.ReplaceAll(cleanedText, "_", "")
+
 	// Initialize the analysis
 	analysis := &PortfolioAnalysis{
 		Recommendations: []Recommendation{},
 	}
 	
-	// Extract the summary
-	summaryParts := strings.Split(analysisText, "RECOMMENDATIONS:")
+	// Split into summary and recommendations sections (English then Russian)
+	summaryParts := strings.Split(cleanedText, "RECOMMENDATIONS:")
+	if len(summaryParts) < 2 {
+		summaryParts = strings.Split(cleanedText, "РЕКОМЕНДАЦИИ:")
+	}
 	if len(summaryParts) < 2 {
 		// If no "RECOMMENDATIONS:" section, try to extract summary anyway
-		summaryLines := strings.Split(analysisText, "\n")
+		summaryLines := strings.Split(cleanedText, "\n")
 		for i, line := range summaryLines {
 			if strings.HasPrefix(line, "SUMMARY:") {
 				analysis.Summary = strings.TrimSpace(strings.TrimPrefix(line, "SUMMARY:"))
@@ -241,7 +249,7 @@ func parseAnalysisResponse(analysisText string, portfolio *invest.Portfolio) (*P
 	}
 	
 	// If no recommendations were found but there is a response, create a fallback
-	if len(analysis.Recommendations) == 0 && analysisText != "" {
+	if len(analysis.Recommendations) == 0 && strings.TrimSpace(cleanedText) != "" {
 		analysis.Summary = "Analysis completed, but could not parse specific recommendations."
 		
 		// Create generic recommendations based on portfolio

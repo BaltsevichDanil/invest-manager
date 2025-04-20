@@ -115,8 +115,8 @@ func (c *Client) GetPortfolio(ctx context.Context) (*Portfolio, error) {
 
 		positions = append(positions, Position{
 			FIGI:           pos.Figi,
-			Ticker:         "",
-			Name:           "",
+			Ticker:         pos.Figi,
+			Name:           pos.InstrumentType,
 			InstrumentType: pos.InstrumentType,
 			Quantity:       qty,
 			AveragePrice:   avgPrice,
