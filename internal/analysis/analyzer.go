@@ -97,11 +97,6 @@ Explanation: [1-2 sentences explaining the opportunity]
 			},
 		},
 		Temperature: 0.3, // Lower temperature for more focused responses
-		Tools: []openai.Tool{
-			{
-				Type: "web_search_preview",
-			},
-		},
 	}
 	// Make the API call
 	response, err := a.client.CreateChatCompletion(ctx, request)
