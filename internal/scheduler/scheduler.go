@@ -114,9 +114,9 @@ func (s *Scheduler) runPortfolioAnalysis(isMonthlyReminder bool) error {
 		return fmt.Errorf("failed to get portfolio: %w", err)
 	}
 	
-	// Step 2: Fetch news
-	s.logger.Printf("Fetching news about Russian stocks")
-	articles, err := s.job.newsFetcher.FetchNews("Russia stocks", 5)
+	// Step 2: Fetch news about Russia
+	s.logger.Printf("Fetching fresh news about Russia")
+	articles, err := s.job.newsFetcher.FetchNews("Russia", 5)
 	if err != nil {
 		s.logger.Printf("Warning: failed to fetch news: %v. Continuing without news data", err)
 		articles = []news.Article{} // Empty but continue
@@ -129,9 +129,9 @@ func (s *Scheduler) runPortfolioAnalysis(isMonthlyReminder bool) error {
 		return fmt.Errorf("failed to analyze portfolio: %w", err)
 	}
 	
-	// Step 4: Send results to Telegram
+	// Step 4: Send results to Telegram with fresh news
 	s.logger.Printf("Sending analysis to Telegram")
-	if err := s.job.telegramBot.SendPortfolioAnalysis(portfolio, analysis); err != nil {
+	if err := s.job.telegramBot.SendPortfolioAnalysis(portfolio, analysis, articles); err != nil {
 		return fmt.Errorf("failed to send analysis to Telegram: %w", err)
 	}
 	

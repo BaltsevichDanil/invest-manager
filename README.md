@@ -24,7 +24,6 @@ A Telegram bot that provides daily analysis of your Tinkoff Invest portfolio usi
 The application uses the following environment variables:
 
 - `TINKOFF_TOKEN` - Your Tinkoff Invest API token
-- `TINKOFF_ACCOUNT_ID` - Your Tinkoff account ID
 - `TINKOFF_ENDPOINT` - (Optional) Custom Tinkoff API endpoint
 - `OPENAI_API_KEY` - Your OpenAI API key
 - `TELEGRAM_TOKEN` - Your Telegram Bot token

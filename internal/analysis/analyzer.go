@@ -22,6 +22,7 @@ type Recommendation struct {
 // PortfolioAnalysis contains the complete analysis results
 type PortfolioAnalysis struct {
 	Recommendations []Recommendation
+	Opportunities   []Recommendation // Added opportunities field
 	Summary         string
 	IsMonthlyReminder bool
 	RawText         string // store original AI response
@@ -57,6 +58,7 @@ func (a *Analyzer) AnalyzePortfolio(ctx context.Context, portfolio *invest.Portf
 	systemPrompt := `You are an investment advisor specializing in Russian stocks. 
 You will analyze a portfolio and relevant news to provide actionable advice for each position.
 For each position, provide a recommendation (BUY/SELL/HOLD) and a brief, easy-to-understand explanation.
+Additionally, suggest a few trading opportunities: stocks not currently in the portfolio that present attractive long or short positions (LONG/SHORT), with a brief explanation.
 Use clear language suitable for non-financial experts ("for beginners").
 Format your response as:
 
@@ -67,12 +69,14 @@ RECOMMENDATIONS:
 [ticker]: [NAME] - [BUY/SELL/HOLD]
 Explanation: [1-2 sentences explaining the recommendation]
 
-[Next position...]
+OPPORTUNITIES:
+[ticker]: [NAME] - [LONG/SHORT]
+Explanation: [1-2 sentences explaining the opportunity]
 
 Отвечай на русском языке.
-Пожалуйста, используйте заголовки строго на английском языке как "SUMMARY:" и "RECOMMENDATIONS:".`
+Пожалуйста, используйте заголовки строго на английском языке как "SUMMARY:", "RECOMMENDATIONS:", and "OPPORTUNITIES:".`
 
-	userPrompt := fmt.Sprintf("Here is the current portfolio information:\n\n%s\n\nRecent news about Russian stocks:\n\n%s\n\nPlease provide investment recommendations for each position in the portfolio.\n\nОтвечай на русском языке.", portfolioInfo, newsInfo)
+	userPrompt := fmt.Sprintf("Here is the current portfolio information:\n\n%s\n\nRecent news about Russia:\n\n%s\n\nPlease provide investment recommendations for each position in the portfolio, and suggest trading opportunities (LONG/SHORT) for other relevant stocks.\n\nОтвечай на русском языке.", portfolioInfo, newsInfo)
 	
 	// Add monthly reminder if needed
 	if isMonthlyReminder {
@@ -93,8 +97,12 @@ Explanation: [1-2 sentences explaining the recommendation]
 			},
 		},
 		Temperature: 0.3, // Lower temperature for more focused responses
+		Tools: []openai.Tool{
+			{
+				Type: "web_search_preview",
+			},
+		},
 	}
-	
 	// Make the API call
 	response, err := a.client.CreateChatCompletion(ctx, request)
 	if err != nil {
@@ -165,6 +173,7 @@ func parseAnalysisResponse(analysisText string, portfolio *invest.Portfolio) (*P
 	// Initialize the analysis
 	analysis := &PortfolioAnalysis{
 		Recommendations: []Recommendation{},
+		Opportunities:   []Recommendation{},
 	}
 	
 	// Split into summary and recommendations sections (English then Russian)
@@ -271,6 +280,43 @@ func parseAnalysisResponse(analysisText string, portfolio *invest.Portfolio) (*P
 				Action: action,
 				Reason: "Based on current position yield.",
 			})
+		}
+	}
+	
+	// Parse opportunities section if present
+	if strings.Contains(cleanedText, "OPPORTUNITIES:") {
+		oppParts := strings.SplitN(cleanedText, "OPPORTUNITIES:", 2)
+		oppText := oppParts[1]
+		oppLines := strings.Split(oppText, "\n")
+		for i := 0; i < len(oppLines); i++ {
+			line := strings.TrimSpace(oppLines[i])
+			if line == "" {
+				continue
+			}
+			if strings.Contains(line, "-") {
+				parts := strings.SplitN(line, "-", 2)
+				left := strings.TrimSpace(parts[0])
+				action := strings.TrimSpace(parts[1])
+				tn := strings.SplitN(left, ":", 2)
+				ticker := strings.TrimSpace(tn[0])
+				name := ""
+				if len(tn) > 1 {
+					name = strings.TrimSpace(tn[1])
+				}
+				opp := Recommendation{
+					Ticker: ticker,
+					Name:   name,
+					Action: action,
+				}
+				if i+1 < len(oppLines) {
+					next := strings.TrimSpace(oppLines[i+1])
+					if strings.HasPrefix(next, "Explanation:") {
+						opp.Reason = strings.TrimSpace(strings.TrimPrefix(next, "Explanation:"))
+						i++
+					}
+				}
+				analysis.Opportunities = append(analysis.Opportunities, opp)
+			}
 		}
 	}
 	

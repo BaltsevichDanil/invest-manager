@@ -130,9 +130,9 @@ func (b *Bot) handleAnalyzeCommand(message *tgbotapi.Message) {
 			return
 		}
 		
-		// Get news
-		b.logger.Println("Fetching news...")
-		articles, err := b.newsFetcher.FetchNews("Russia stocks", 5)
+		// Get news about Russia
+		b.logger.Println("Fetching news about Russia...")
+		articles, err := b.newsFetcher.FetchNews("Russia", 5)
 		if err != nil {
 			b.logger.Printf("Warning: could not fetch news: %v, continuing without news", err)
 			articles = []news.Article{} // Empty but continue
@@ -148,9 +148,8 @@ func (b *Bot) handleAnalyzeCommand(message *tgbotapi.Message) {
 			return
 		}
 		
-		// Send analysis results
-		b.logger.Println("Sending analysis results...")
-		err = b.SendPortfolioAnalysis(portfolio, analysis)
+		// Send analysis results with fresh news
+		err = b.SendPortfolioAnalysis(portfolio, analysis, articles)
 		if err != nil {
 			b.logger.Printf("Error sending portfolio analysis: %v", err)
 			b.sendMessage(fmt.Sprintf("Ошибка при отправке анализа: %v", err))
@@ -215,11 +214,25 @@ func (b *Bot) sendMessage(text string) error {
 	return nil
 }
 
-// SendPortfolioAnalysis sends a formatted portfolio analysis report
-func (b *Bot) SendPortfolioAnalysis(portfolio *invest.Portfolio, analysis *analysis.PortfolioAnalysis) error {
+// SendPortfolioAnalysis sends a formatted portfolio analysis report along with fresh news articles
+func (b *Bot) SendPortfolioAnalysis(portfolio *invest.Portfolio, analysis *analysis.PortfolioAnalysis, articles []news.Article) error {
 	var sb strings.Builder
 	
-	// Create header
+	// Add fresh news section
+	sb.WriteString("📰 *NEWS:*")
+	if len(articles) == 0 {
+		sb.WriteString("\nНет доступных новостей.\n\n")
+	} else {
+		sb.WriteString("\n\n")
+		for _, article := range articles {
+			sb.WriteString(fmt.Sprintf("*%s*\n", article.Title))
+			sb.WriteString(fmt.Sprintf("Source: %s\n", article.Source.Name))
+			sb.WriteString(fmt.Sprintf("Date: %s\n", article.PublishedAt.Format("2006-01-02")))
+			sb.WriteString(fmt.Sprintf("URL: %s\n\n", article.URL))
+		}
+	}
+	
+	// Portfolio analysis header
 	sb.WriteString("📊 *PORTFOLIO ANALYSIS* 📊\n\n")
 	
 	// Add summary
@@ -246,6 +259,20 @@ func (b *Bot) SendPortfolioAnalysis(portfolio *invest.Portfolio, analysis *analy
 		
 		sb.WriteString(fmt.Sprintf("*%s (%s)* - %s %s\n", rec.Ticker, rec.Name, actionEmoji, rec.Action))
 		sb.WriteString(fmt.Sprintf("_%s_\n\n", rec.Reason))
+	}
+	
+	// After sending recommendations, add opportunities if available
+	if analysis.Opportunities != nil && len(analysis.Opportunities) > 0 {
+		sb.WriteString("\n*OPPORTUNITIES:*\n")
+		for _, opp := range analysis.Opportunities {
+			// Determine emoji for LONG/SHORT
+			actionEmoji := "📈" // default LONG
+			if strings.ToUpper(opp.Action) == "SHORT" {
+				actionEmoji = "📉"
+			}
+			sb.WriteString(fmt.Sprintf("*%s (%s)* - %s %s\n", opp.Ticker, opp.Name, actionEmoji, strings.ToUpper(opp.Action)))
+			sb.WriteString(fmt.Sprintf("_%s_\n\n", opp.Reason))
+		}
 	}
 	
 	// Add monthly reminder if needed
